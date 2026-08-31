@@ -137,6 +137,49 @@ func newPipe(t *testing.T) (*io.PipeWriter, *io.PipeReader) {
 	return w, r
 }
 
+// TestModbusRequesterSlaveIDTracksUpdates checks the SlaveID a plugin's
+// ModbusAccess reports follows hello's initial value and later slave_id
+// messages — gridcharge needs the current one, not a snapshot from
+// startup, since the user can switch inverter profiles at any time.
+func TestModbusRequesterSlaveIDTracksUpdates(t *testing.T) {
+	coreToPlugin, pluginIn := newPipe(t)
+	pluginOut, coreFromPlugin := newPipe(t)
+
+	seen := make(chan byte, 4)
+	go Serve(ServeConfig{
+		New: func(_ string, _ func() []string, modbus ModbusAccess) (Plugin, http.Handler) {
+			go func() {
+				// Poll a few times; the test drives ticks to pace this
+				// without needing a real timer.
+				for i := 0; i < 3; i++ {
+					seen <- modbus.SlaveID()
+					time.Sleep(20 * time.Millisecond)
+				}
+			}()
+			return &fakePlugin{}, nil
+		},
+		In:  pluginIn,
+		Out: pluginOut,
+	})
+
+	coreReader := bufio.NewReader(coreFromPlugin)
+	_ = WriteEnvelope(coreToPlugin, Envelope{Type: TypeHello, SlaveID: 1})
+	mustReadEnvelope(t, coreReader) // ready
+
+	if got := <-seen; got != 1 {
+		t.Fatalf("initial SlaveID() = %d, want 1 (from hello)", got)
+	}
+
+	_ = WriteEnvelope(coreToPlugin, Envelope{Type: TypeSlaveID, SlaveID: 7})
+	time.Sleep(30 * time.Millisecond) // let the inline dispatch land before the next poll
+
+	if got := <-seen; got != 7 {
+		t.Fatalf("SlaveID() after update = %d, want 7", got)
+	}
+
+	_ = WriteEnvelope(coreToPlugin, Envelope{Type: TypeShutdown})
+}
+
 func mustReadEnvelope(t *testing.T, r *bufio.Reader) Envelope {
 	t.Helper()
 	e, err := ReadEnvelope(r)

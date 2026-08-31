@@ -25,6 +25,10 @@ const modbusCallTimeout = 5 * time.Second
 type ModbusAccess interface {
 	ReadRegisters(slaveID, fc byte, address, count uint16) ([]uint16, error)
 	WriteRegister(slaveID byte, address, value uint16) error
+	// SlaveID is the core's active inverter profile's Modbus slave
+	// address, kept live — it changes if the user switches profiles in
+	// Settings, with no restart of this plugin needed.
+	SlaveID() byte
 }
 
 // Plugin is what a plugin's constructor returns: Hooks plus the ability to
@@ -91,6 +95,7 @@ func Serve(cfg ServeConfig) error {
 	}
 
 	mb := newModbusRequester(write)
+	mb.slaveID.Store(uint32(hello.SlaveID))
 
 	plugin, handler := cfg.New(hello.DeviceSerial, getKeys, mb)
 
@@ -159,6 +164,8 @@ func Serve(cfg ServeConfig) error {
 			return nil
 		case TypeModbusReadResp, TypeModbusWriteResp:
 			mb.deliver(e) // handled inline: never queued behind a possibly-blocked OnReading/Tick
+		case TypeSlaveID:
+			mb.slaveID.Store(uint32(e.SlaveID)) // inline too: just a value update, no Hooks call involved
 		default:
 			work <- e
 		}
@@ -168,12 +175,15 @@ func Serve(cfg ServeConfig) error {
 // modbusRequester implements ModbusAccess by sending modbus_read/write
 // over the protocol connection and blocking for the matching *_resp.
 type modbusRequester struct {
-	write  func(Envelope) error
-	nextID atomic.Uint64
+	write   func(Envelope) error
+	nextID  atomic.Uint64
+	slaveID atomic.Uint32
 
 	pendingMu sync.Mutex
 	pending   map[string]chan Envelope
 }
+
+func (m *modbusRequester) SlaveID() byte { return byte(m.slaveID.Load()) }
 
 func newModbusRequester(write func(Envelope) error) *modbusRequester {
 	return &modbusRequester{write: write, pending: make(map[string]chan Envelope)}

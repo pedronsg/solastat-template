@@ -62,7 +62,11 @@ type Envelope struct {
 
 	// modbus_read / modbus_read_resp / modbus_write / modbus_write_resp,
 	// both directions — RequestID correlates a response to its request
-	// (the single stdio stream can have more than one in flight).
+	// (the single stdio stream can have more than one in flight). SlaveID
+	// is also sent standalone (hello, slave_id) to tell a plugin needing
+	// Modbus access which slave address the core's active inverter profile
+	// currently uses — it can change if the user switches profiles, so
+	// ModbusAccess always reflects the latest one sent, not just hello's.
 	RequestID string   `json:"request_id,omitempty"`
 	SlaveID   byte     `json:"slave_id,omitempty"`
 	FC        byte     `json:"fc,omitempty"`
@@ -79,8 +83,9 @@ type Envelope struct {
 
 const (
 	// core → plugin
-	TypeHello    = "hello"    // first message: DeviceSerial, Keys
+	TypeHello    = "hello"    // first message: DeviceSerial, Keys, SlaveID
 	TypeKeys     = "keys"     // Keys pool changed — Keys
+	TypeSlaveID  = "slave_id" // active Modbus slave address changed — SlaveID
 	TypeReading  = "reading"  // one poll cycle — TsUnixMs, Error, Readings
 	TypeTick     = "tick"     // fixed-interval tick, no payload
 	TypeShutdown = "shutdown" // core is exiting, no payload
