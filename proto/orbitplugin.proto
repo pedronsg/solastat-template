@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package orbitplugin;
+
+option go_package = "github.com/pedronsg/solastat-template/proto/gen;orbitpluginpb";
+
+// PluginHub is implemented by the core app (e.g. solastat-omie) and consumed
+// by every plugin (e.g. solastat-relay). It runs on a local Unix domain
+// socket — never exposed off-device — so the transport itself carries no
+// TLS; authorization is enforced at the application layer by Register.
+service PluginHub {
+  // Register is the first call a plugin makes. The core verifies LicenseKey
+  // against SHA256(deviceSerial + ":" + PluginId) using the plugin's
+  // embedded Ed25519 public key. A plugin that gets Authorized=false must
+  // not start its automation loop.
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+
+  // SubscribeSolarData streams every poll-cycle snapshot from the core's
+  // Modbus poller, for as long as the plugin stays connected.
+  rpc SubscribeSolarData(SubscribeRequest) returns (stream SolarSnapshot);
+
+  // ReadRegisters / WriteRegister proxy to the core's single Modbus/RS485
+  // connection — the core is the only process allowed to own the bus.
+  rpc ReadRegisters(ReadRegistersRequest) returns (ReadRegistersResponse);
+  rpc WriteRegister(WriteRegisterRequest) returns (WriteRegisterResponse);
+}
+
+message RegisterRequest {
+  string plugin_id = 1;      // e.g. "relay", "gridcharge", "auth"
+  string plugin_version = 2;
+  string license_key = 3;    // base64 Ed25519 signature, empty if not yet activated
+}
+
+message RegisterResponse {
+  bool authorized = 1;
+  string reason = 2;         // human-readable, shown in plugin logs when unauthorized
+  string device_serial_hash = 3; // hex sha256(deviceSerial+":"+pluginId), for diagnostics
+}
+
+message SubscribeRequest {}
+
+message Reading {
+  double value = 1;
+  string unit = 2;
+}
+
+message SolarSnapshot {
+  int64 ts_unix_ms = 1;
+  string error = 2;
+  map<string, Reading> readings = 3;
+}
+
+message ReadRegistersRequest {
+  uint32 slave_id = 1;
+  uint32 fc = 2;
+  uint32 address = 3;
+  uint32 count = 4;
+}
+
+message ReadRegistersResponse {
+  repeated uint32 regs = 1;
+  string error = 2;
+}
+
+message WriteRegisterRequest {
+  uint32 slave_id = 1;
+  uint32 address = 2;
+  uint32 value = 3;
+}
+
+message WriteRegisterResponse {
+  string error = 1;
+}
