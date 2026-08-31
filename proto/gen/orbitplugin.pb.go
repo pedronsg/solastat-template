@@ -23,8 +23,9 @@ const (
 
 type RegisterRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	PluginId      string                 `protobuf:"bytes,1,opt,name=plugin_id,json=pluginId,proto3" json:"plugin_id,omitempty"` // e.g. "relay", "gridcharge", "auth"
+	PluginId      string                 `protobuf:"bytes,1,opt,name=plugin_id,json=pluginId,proto3" json:"plugin_id,omitempty"` // e.g. "relay", "gridcharge"
 	PluginVersion string                 `protobuf:"bytes,2,opt,name=plugin_version,json=pluginVersion,proto3" json:"plugin_version,omitempty"`
+	Authorized    bool                   `protobuf:"varint,3,opt,name=authorized,proto3" json:"authorized,omitempty"` // this plugin's own verified verdict, for Settings display only
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -73,10 +74,16 @@ func (x *RegisterRequest) GetPluginVersion() string {
 	return ""
 }
 
+func (x *RegisterRequest) GetAuthorized() bool {
+	if x != nil {
+		return x.Authorized
+	}
+	return false
+}
+
 type RegisterResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Authorized    bool                   `protobuf:"varint,1,opt,name=authorized,proto3" json:"authorized,omitempty"`
-	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"` // human-readable, shown in plugin logs when unauthorized
+	Keys          []string               `protobuf:"bytes,1,rep,name=keys,proto3" json:"keys,omitempty"` // every raw key pasted into Settings so far, opaque to the core
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -111,18 +118,11 @@ func (*RegisterResponse) Descriptor() ([]byte, []int) {
 	return file_proto_orbitplugin_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *RegisterResponse) GetAuthorized() bool {
+func (x *RegisterResponse) GetKeys() []string {
 	if x != nil {
-		return x.Authorized
+		return x.Keys
 	}
-	return false
-}
-
-func (x *RegisterResponse) GetReason() string {
-	if x != nil {
-		return x.Reason
-	}
-	return ""
+	return nil
 }
 
 type SubscribeRequest struct {
@@ -509,15 +509,15 @@ var File_proto_orbitplugin_proto protoreflect.FileDescriptor
 
 const file_proto_orbitplugin_proto_rawDesc = "" +
 	"\n" +
-	"\x17proto/orbitplugin.proto\x12\vorbitplugin\"U\n" +
+	"\x17proto/orbitplugin.proto\x12\vorbitplugin\"u\n" +
 	"\x0fRegisterRequest\x12\x1b\n" +
 	"\tplugin_id\x18\x01 \x01(\tR\bpluginId\x12%\n" +
-	"\x0eplugin_version\x18\x02 \x01(\tR\rpluginVersion\"J\n" +
-	"\x10RegisterResponse\x12\x1e\n" +
+	"\x0eplugin_version\x18\x02 \x01(\tR\rpluginVersion\x12\x1e\n" +
 	"\n" +
-	"authorized\x18\x01 \x01(\bR\n" +
-	"authorized\x12\x16\n" +
-	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x12\n" +
+	"authorized\x18\x03 \x01(\bR\n" +
+	"authorized\"&\n" +
+	"\x10RegisterResponse\x12\x12\n" +
+	"\x04keys\x18\x01 \x03(\tR\x04keys\"\x12\n" +
 	"\x10SubscribeRequest\"I\n" +
 	"\aReading\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\x01R\x05value\x12\x12\n" +

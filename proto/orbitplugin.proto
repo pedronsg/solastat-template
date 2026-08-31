@@ -10,10 +10,14 @@ option go_package = "github.com/pedronsg/solastat-template/proto/gen;orbitplugin
 // TLS; authorization is enforced at the application layer by Register.
 service PluginHub {
   // Register is the first call a plugin makes, and it repeats it
-  // periodically while unauthorized. The whole license hash/key exchange
-  // happens on the core's Settings page — the plugin only asks "am I
-  // authorized right now", it never handles a license key itself. A plugin
-  // that gets Authorized=false must not start its automation loop.
+  // periodically. The core never verifies a license key itself — it only
+  // stores whatever the user pastes into Settings (opaque to the core) and
+  // hands the raw pool back in every RegisterResponse. Each plugin checks
+  // that pool against its own ID and independently-computed device hash
+  // (see solastat-auth) and reports the verdict back via Authorized on its
+  // *next* call — the core only ever displays what the plugin told it, it
+  // never decides authorization. A plugin that hasn't verified a key naming
+  // itself must not start its automation loop.
   rpc Register(RegisterRequest) returns (RegisterResponse);
 
   // SubscribeSolarData streams every poll-cycle snapshot from the core's
@@ -27,13 +31,13 @@ service PluginHub {
 }
 
 message RegisterRequest {
-  string plugin_id = 1;      // e.g. "relay", "gridcharge", "auth"
+  string plugin_id = 1;       // e.g. "relay", "gridcharge"
   string plugin_version = 2;
+  bool authorized = 3;        // this plugin's own verified verdict, for Settings display only
 }
 
 message RegisterResponse {
-  bool authorized = 1;
-  string reason = 2;         // human-readable, shown in plugin logs when unauthorized
+  repeated string keys = 1;   // every raw key pasted into Settings so far, opaque to the core
 }
 
 message SubscribeRequest {}

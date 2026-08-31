@@ -1,0 +1,3 @@
+[submodule "solastat-auth"]
+	path = solastat-auth
+	url = git@github.com:pedronsg/solastat-auth.git

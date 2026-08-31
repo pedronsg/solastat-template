@@ -1,7 +1,13 @@
 // Package pluginclient is the reusable client every solastat plugin
-// (relay, gridcharge, auth, ...) imports to talk to the core app's
-// PluginHub gRPC service: register + license handshake, subscribe to solar
-// snapshots, and proxy Modbus register reads/writes.
+// (relay, gridcharge, ...) imports to talk to the core app's PluginHub gRPC
+// service: exchange the raw license-key pool, subscribe to solar snapshots,
+// and proxy Modbus register reads/writes.
+//
+// The core never decides authorization — it only relays whatever keys the
+// user pasted into Settings. Client accepts a checkAuthorized callback
+// (typically backed by solastat-auth.Authorizes) that the caller supplies
+// to verify those keys itself, and reports the verdict back to the core on
+// the next Register call, purely for Settings display.
 //
 // It mirrors the connect/reconnect shape already used elsewhere in this
 // codebase (e.g. the OrbitOS device client, the old fsipc.Client): construct
@@ -24,9 +30,10 @@ const (
 	dialTimeout    = 3 * time.Second
 	rpcTimeout     = 3 * time.Second
 	reconnectDelay = 2 * time.Second
-	// reregisterInterval re-sends Register while unauthorized, so activating
-	// the plugin in the core's Settings page unlocks a running plugin
-	// without requiring a restart.
+	// reregisterInterval re-sends Register (and re-runs checkAuthorized
+	// against the refreshed key pool) on a fixed cadence, so pasting a new
+	// key into the core's Settings page unlocks a running plugin without
+	// requiring a restart.
 	reregisterInterval = 15 * time.Second
 )
 
@@ -39,18 +46,18 @@ const DefaultSocketPath = "/tmp/orbitos/solastat-omie-pluginhub.sock"
 // by gridcharge.ModbusAccess, so it's a drop-in Modbus transport for
 // automation packages ported from the monolith.
 type Client struct {
-	target        string
-	pluginID      string
-	pluginVersion string
+	target          string
+	pluginID        string
+	pluginVersion   string
+	checkAuthorized func(keys []string) bool
 
 	mu         sync.RWMutex
 	conn       *grpc.ClientConn
 	hub        pb.PluginHubClient
 	authorized bool
-	reason     string
 
 	authMu   sync.Mutex
-	authSubs []func(authorized bool, reason string)
+	authSubs []func(authorized bool)
 
 	dataMu   sync.Mutex
 	dataSubs []func(*pb.SolarSnapshot)
@@ -61,15 +68,20 @@ type Client struct {
 
 // New starts connecting in the background and returns immediately. Call
 // Close on shutdown to stop the background reconnect loop.
-func New(socketPath, pluginID, pluginVersion string) *Client {
+//
+// checkAuthorized is called with the raw key pool the core is currently
+// holding, on every (re)register — implement it with
+// solastat-auth.Authorizes(key, myDeviceHash, pluginID) for each key.
+func New(socketPath, pluginID, pluginVersion string, checkAuthorized func(keys []string) bool) *Client {
 	if socketPath == "" {
 		socketPath = DefaultSocketPath
 	}
 	c := &Client{
-		target:        "unix:" + socketPath,
-		pluginID:      pluginID,
-		pluginVersion: pluginVersion,
-		done:          make(chan struct{}),
+		target:          "unix:" + socketPath,
+		pluginID:        pluginID,
+		pluginVersion:   pluginVersion,
+		checkAuthorized: checkAuthorized,
+		done:            make(chan struct{}),
 	}
 	go c.connectLoop()
 	return c
@@ -88,18 +100,18 @@ func (c *Client) Close() {
 	})
 }
 
-// OnAuthorization registers fn to be called whenever the authorization
-// state changes (including the first Register response). Plugins should
+// OnAuthorization registers fn to be called whenever the locally-verified
+// authorization state changes (including the first check). Plugins should
 // start/stop their automation loop from this callback instead of assuming
 // authorization never changes at runtime.
-func (c *Client) OnAuthorization(fn func(authorized bool, reason string)) {
+func (c *Client) OnAuthorization(fn func(authorized bool)) {
 	c.authMu.Lock()
 	c.authSubs = append(c.authSubs, fn)
 	c.mu.RLock()
-	authorized, reason := c.authorized, c.reason
+	authorized := c.authorized
 	c.mu.RUnlock()
 	c.authMu.Unlock()
-	fn(authorized, reason)
+	fn(authorized)
 }
 
 // OnSnapshot registers fn to be called with every solar poll-cycle
@@ -163,13 +175,11 @@ func (c *Client) wait(d time.Duration) {
 }
 
 // runSession registers, then streams solar data while periodically
-// re-registering to pick up a freshly activated license. Returns when the
-// stream ends (connection dropped) so connectLoop can redial.
+// re-registering to re-check the key pool for a freshly activated license.
+// Returns when the stream ends (connection dropped) so connectLoop can
+// redial.
 func (c *Client) runSession(conn *grpc.ClientConn) {
-	if !c.register() {
-		// Even if unauthorized, stay connected and keep polling Register —
-		// activating the license in Settings should not require a restart.
-	}
+	c.register()
 
 	reregister := time.NewTicker(reregisterInterval)
 	defer reregister.Stop()
@@ -187,16 +197,20 @@ func (c *Client) runSession(conn *grpc.ClientConn) {
 		case <-streamDone:
 			return
 		case <-reregister.C:
-			if !c.Authorized() {
-				c.register()
-			}
+			c.register()
 		}
 	}
 }
 
+// register reports the last-known authorized verdict to the core (purely
+// for its Settings display), fetches the current raw key pool, re-checks it
+// with checkAuthorized, and fires OnAuthorization subscribers if the
+// verdict changed. The core's response is never trusted for the
+// authorization decision itself — only checkAuthorized's return value is.
 func (c *Client) register() bool {
 	c.mu.RLock()
 	hub := c.hub
+	lastAuthorized := c.authorized
 	c.mu.RUnlock()
 	if hub == nil {
 		return false
@@ -207,27 +221,28 @@ func (c *Client) register() bool {
 	resp, err := hub.Register(ctx, &pb.RegisterRequest{
 		PluginId:      c.pluginID,
 		PluginVersion: c.pluginVersion,
+		Authorized:    lastAuthorized,
 	})
-
-	var authorized bool
-	var reason string
 	if err != nil {
-		authorized, reason = false, "register rpc failed: "+err.Error()
-	} else {
-		authorized, reason = resp.Authorized, resp.Reason
+		return lastAuthorized
+	}
+
+	authorized := false
+	if c.checkAuthorized != nil {
+		authorized = c.checkAuthorized(resp.Keys)
 	}
 
 	c.mu.Lock()
-	changed := c.authorized != authorized || c.reason != reason
-	c.authorized, c.reason = authorized, reason
+	changed := c.authorized != authorized
+	c.authorized = authorized
 	c.mu.Unlock()
 
 	if changed {
 		c.authMu.Lock()
-		subs := append([]func(bool, string){}, c.authSubs...)
+		subs := append([]func(bool){}, c.authSubs...)
 		c.authMu.Unlock()
 		for _, fn := range subs {
-			fn(authorized, reason)
+			fn(authorized)
 		}
 	}
 	return authorized

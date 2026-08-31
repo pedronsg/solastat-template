@@ -35,10 +35,14 @@ const (
 // TLS; authorization is enforced at the application layer by Register.
 type PluginHubClient interface {
 	// Register is the first call a plugin makes, and it repeats it
-	// periodically while unauthorized. The whole license hash/key exchange
-	// happens on the core's Settings page — the plugin only asks "am I
-	// authorized right now", it never handles a license key itself. A plugin
-	// that gets Authorized=false must not start its automation loop.
+	// periodically. The core never verifies a license key itself — it only
+	// stores whatever the user pastes into Settings (opaque to the core) and
+	// hands the raw pool back in every RegisterResponse. Each plugin checks
+	// that pool against its own ID and independently-computed device hash
+	// (see solastat-auth) and reports the verdict back via Authorized on its
+	// *next* call — the core only ever displays what the plugin told it, it
+	// never decides authorization. A plugin that hasn't verified a key naming
+	// itself must not start its automation loop.
 	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error)
 	// SubscribeSolarData streams every poll-cycle snapshot from the core's
 	// Modbus poller, for as long as the plugin stays connected.
@@ -116,10 +120,14 @@ func (c *pluginHubClient) WriteRegister(ctx context.Context, in *WriteRegisterRe
 // TLS; authorization is enforced at the application layer by Register.
 type PluginHubServer interface {
 	// Register is the first call a plugin makes, and it repeats it
-	// periodically while unauthorized. The whole license hash/key exchange
-	// happens on the core's Settings page — the plugin only asks "am I
-	// authorized right now", it never handles a license key itself. A plugin
-	// that gets Authorized=false must not start its automation loop.
+	// periodically. The core never verifies a license key itself — it only
+	// stores whatever the user pastes into Settings (opaque to the core) and
+	// hands the raw pool back in every RegisterResponse. Each plugin checks
+	// that pool against its own ID and independently-computed device hash
+	// (see solastat-auth) and reports the verdict back via Authorized on its
+	// *next* call — the core only ever displays what the plugin told it, it
+	// never decides authorization. A plugin that hasn't verified a key naming
+	// itself must not start its automation loop.
 	Register(context.Context, *RegisterRequest) (*RegisterResponse, error)
 	// SubscribeSolarData streams every poll-cycle snapshot from the core's
 	// Modbus poller, for as long as the plugin stays connected.

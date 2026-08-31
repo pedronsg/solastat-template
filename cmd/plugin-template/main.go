@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pedronsg/solastat-auth/pkg/auth"
 	"github.com/pedronsg/solastat-template/pkg/pluginclient"
 	orbitpluginpb "github.com/pedronsg/solastat-template/proto/gen"
 
@@ -55,19 +56,54 @@ func main() {
 		defer deviceClient.Close()
 	}
 
+	// Compute this device's hash independently — never trust the core to
+	// tell us which device we're running on. Empty if the device connection
+	// failed, in which case checkAuthorized below always reports false
+	// (fail closed) rather than skipping verification.
+	var deviceHash string
+	if deviceClient != nil {
+		serial, serr := deviceClient.SystemManager.GetSystemUuid()
+		if serr != nil || serial == "" {
+			serial, _ = deviceClient.SystemManager.GetBoardSerial()
+		}
+		if serial != "" {
+			deviceHash = auth.DeviceHash(serial)
+		}
+	}
+	if deviceHash == "" {
+		logger.Errorf(logTag, "could not determine device identity — this plugin will never authorize")
+	}
+
+	// checkAuthorized is called by pluginclient with the raw key pool the
+	// core is currently holding (opaque to it) — this plugin verifies each
+	// key itself, against its own ID and independently-computed device
+	// hash. The core's Register response is never trusted for this
+	// decision, only for reporting the verdict back for Settings display.
+	checkAuthorized := func(keys []string) bool {
+		if deviceHash == "" {
+			return false
+		}
+		for _, key := range keys {
+			if auth.Authorizes(key, deviceHash, pluginID) {
+				return true
+			}
+		}
+		return false
+	}
+
 	// Connect to the core's PluginHub. Authorization can flip at runtime
 	// (e.g. right after the user pastes a license key in Settings), so react
 	// to it via OnAuthorization rather than checking it once at startup.
-	hub := pluginclient.New(*pluginHubSocket, pluginID, "0.1.0")
+	hub := pluginclient.New(*pluginHubSocket, pluginID, "0.1.0", checkAuthorized)
 	defer hub.Close()
 
 	authorized := false
-	hub.OnAuthorization(func(ok bool, reason string) {
+	hub.OnAuthorization(func(ok bool) {
 		authorized = ok
 		if ok {
 			logger.Infof(logTag, "authorized")
 		} else {
-			logger.Warnf(logTag, "not authorized: %s", reason)
+			logger.Warnf(logTag, "not authorized — activate this plugin in the core's Settings page")
 		}
 	})
 

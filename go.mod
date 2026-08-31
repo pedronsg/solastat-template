@@ -4,6 +4,7 @@ go 1.25.4
 
 require (
 	github.com/OrbitOS-org/orbit-os-sdk-go/v26 v26.0.0
+	github.com/pedronsg/solastat-auth v0.0.0
 	google.golang.org/grpc v1.77.0
 	google.golang.org/protobuf v1.36.10
 )
@@ -16,3 +17,5 @@ require (
 )
 
 replace github.com/OrbitOS-org/orbit-os-sdk-go/v26 => ./orbit-os-sdk-go
+
+replace github.com/pedronsg/solastat-auth => ./solastat-auth
