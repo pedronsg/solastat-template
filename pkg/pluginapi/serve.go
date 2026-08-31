@@ -118,26 +118,49 @@ func Serve(cfg ServeConfig) error {
 		}
 	}
 
+	// work carries reading/tick/keys envelopes to a dedicated goroutine
+	// that processes them one at a time, in order. This must NOT be the
+	// same goroutine that reads stdin below: OnReading/Tick are allowed to
+	// make blocking ModbusAccess calls, which wait for a
+	// modbus_read_resp/modbus_write_resp that only the stdin-reading loop
+	// can deliver — if that loop were the one blocked inside Tick(), it
+	// could never read the very response unblocking it.
+	work := make(chan Envelope, 16)
+	workDone := make(chan struct{})
+	go func() {
+		defer close(workDone)
+		for e := range work {
+			switch e.Type {
+			case TypeKeys:
+				keysMu.Lock()
+				keys = e.Keys
+				keysMu.Unlock()
+			case TypeReading:
+				plugin.OnReading(e.Readings)
+				reportAuthorization()
+			case TypeTick:
+				plugin.Tick()
+				reportAuthorization()
+			}
+		}
+	}()
+
 	for {
 		e, err := ReadEnvelope(stdin)
 		if err != nil {
+			close(work)
+			<-workDone
 			return nil // stdin closed — core exited (or sent malformed input); either way, stop.
 		}
 		switch e.Type {
 		case TypeShutdown:
+			close(work)
+			<-workDone
 			return nil
-		case TypeKeys:
-			keysMu.Lock()
-			keys = e.Keys
-			keysMu.Unlock()
-		case TypeReading:
-			plugin.OnReading(e.Readings)
-			reportAuthorization()
-		case TypeTick:
-			plugin.Tick()
-			reportAuthorization()
 		case TypeModbusReadResp, TypeModbusWriteResp:
-			mb.deliver(e)
+			mb.deliver(e) // handled inline: never queued behind a possibly-blocked OnReading/Tick
+		default:
+			work <- e
 		}
 	}
 }
