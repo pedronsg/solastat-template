@@ -1,51 +1,76 @@
 # solastat-template
 
-Public scaffold and shared framework for solastat plugin submodules (relay,
-gridcharge, and any future one). Not itself a deployable plugin — it
-provides:
+Public shared contract for solastat plugin submodules (relay, gridcharge,
+and any future one). Every plugin is a plain Go library, compiled directly
+into the `solastat-omie` core binary via a Go build tag when its submodule
+is checked out — there is no separate process, no RPC, no `.orb` of its
+own. This repo has no dependency on the OrbitOS SDK or on anything else: it
+is the one small, always-public thing the core requires to build.
 
-- `proto/` — the `PluginHub` gRPC contract between the core app (e.g.
-  `solastat-omie`) and every plugin, plus generated Go code (`proto/gen`).
-  The core is a dumb relay for license keys: it stores whatever the user
-  pastes into Settings and hands the raw pool to every plugin that asks —
-  it never decides authorization itself.
-- `pkg/pluginclient` — the client every plugin imports to connect to the
-  core's `PluginHub`: solar-data subscription, Modbus register read/write,
-  and the key-pool exchange. You supply a `checkAuthorized(keys []string)
-  bool` callback (backed by
-  [`solastat-auth`](https://github.com/pedronsg/solastat-auth)'s
-  `Authorizes`) — pluginclient calls it on every (re)register and fires
-  `OnAuthorization` when the verdict changes, so activating a key in
-  Settings unlocks a running plugin without a restart.
-- `cmd/plugin-template` — a minimal, complete, buildable plugin app,
-  including the `solastat-auth`-based verification wiring. Copy this
-  directory to start a new plugin: rename the module/package_id, wire
-  `pluginclient.OnSnapshot` to your automation logic.
+## `pkg/pluginapi`
 
-## Starting a new plugin
+```go
+type Reading struct { Label string; Value float64; Unit string }
 
-1. Copy `cmd/plugin-template` into your new plugin repo.
-2. Change `pluginID` in `main.go` and `package_id`/`entry_point` in
-   `metadata.json` to match.
-3. Add this repo and `solastat-auth` as git submodules (same convention as
-   `orbit-os-sdk-go`) and point `go.mod`'s `replace` directives at them.
-4. Import `github.com/pedronsg/solastat-template/pkg/pluginclient` to talk
-   to the core, and `github.com/pedronsg/solastat-auth/pkg/auth` to verify
-   your own license key — see `cmd/plugin-template/main.go`.
+type Hooks interface {
+    OnReading(readings map[string]Reading)
+    Tick()
+}
 
-## License key flow
+type Info struct { ID, Version string; Authorized bool }
+```
 
-Verification happens entirely on the plugin side (see `solastat-auth`) —
-the core only stores and relays raw key strings, it never parses or
-verifies them.
+- **`Reading`** — the shared shape for a decoded poll-cycle value. The core
+  converts its own `internal/solar.Data` into `map[string]Reading` once per
+  poll and hands it to every compiled-in plugin.
+- **`Hooks`** — what a plugin exposes. `OnReading` fires once per poll
+  cycle; `Tick` fires on a fixed ~1s interval for time-based state
+  (timeouts, cooldowns) independent of polling. Both must be safe to call
+  even while unauthorized — a plugin gates its own behavior internally
+  (see [`solastat-auth`](https://github.com/pedronsg/solastat-auth)) rather
+  than trusting the core to withhold calls.
+- **`Info`** — what a plugin reports about itself for the Settings page's
+  plugin list.
 
-1. Settings page (core app) shows one device hash — `auth.DeviceHash`
-   of the device's serial, not tied to any plugin.
-2. Whoever holds the private key runs, offline:
-   `keygen sign -priv <key.hex> -hash <hash-from-settings> -plugins relay,gridcharge`
-   — the key encodes which plugin(s) it unlocks.
-3. The resulting key is pasted into Settings' single, generic "activate"
-   box. The core just stores it and hands it to every connected plugin on
-   their next `Register` call; each plugin checks it against its own ID and
-   independently-computed device hash. A plugin nobody has a key for never
-   reports itself as authorized, so it never appears in the Settings list.
+## The pattern for a new plugin
+
+A plugin repo (see `solastat-relay` for a full example) looks like:
+
+```
+solastat-relay/
+├── pkg/relay/            — the plugin: exported Controller satisfying pluginapi.Hooks
+├── plugins/auth/          — solastat-auth submodule, for verifying its own license key
+├── orbit-os-sdk-go/        — vendored SDK copy, only if the plugin needs device services (GPIO, etc.)
+└── go.mod
+```
+
+In `solastat-omie`:
+
+1. Add the plugin as a git submodule under `plugins/<name>/`.
+2. Add `require`+`replace` entries to `solastat-omie/go.mod` pointing at it
+   (and at `solastat-auth`, if the plugin needs it) — this is always safe to
+   have present even when the submodule isn't checked out: Go's lazy module
+   loading never resolves an unused `replace` target, so the public core
+   still builds standalone with just this repo. Confirmed by building a
+   fresh clone with only `plugins/template` initialized.
+3. Add a build-tag-gated wiring file, e.g. `cmd/solastat-omie/plugins_relay.go`
+   with `//go:build relay` at the top, that imports the plugin package,
+   constructs it, and registers its HTTP routes on the core's `*http.ServeMux`.
+   Pair it with a `//go:build !relay` stub of the same function signature
+   that does nothing, so the untagged build always compiles.
+4. Building with `-tags relay` (and the submodule checked out) compiles the
+   plugin directly into the `solastat-omie` binary — one process, one
+   `.orb`. Building without the tag (the default) produces the plain core,
+   with no reference to the plugin at all.
+
+## License activation
+
+Unchanged in spirit from the previous gRPC-based design, just simpler now
+that there's no process boundary: the core's Settings page shows one device
+hash (`SHA256(deviceSerial)`, reimplemented locally in the core — see
+`internal/pluginhub` in `solastat-omie` — so it never needs to import
+`solastat-auth` itself) and one generic "paste a key" box. The core just
+stores whatever key is pasted; each compiled-in plugin's wiring code
+verifies it directly (`solastat-auth.Authorizes(key, hash, pluginID)`)
+against the core's stored key pool and gates its own `Hooks` methods
+accordingly — the core never parses or verifies a key itself.
