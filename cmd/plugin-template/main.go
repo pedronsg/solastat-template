@@ -35,7 +35,6 @@ var indexHTML []byte
 func main() {
 	host := flag.String("host", "192.168.5.226", "OrbitOS device IP address")
 	pluginHubSocket := flag.String("pluginhub-socket", pluginclient.DefaultSocketPath, "core PluginHub Unix socket path")
-	licenseKeyPath := flag.String("license-key", "", "path to the pasted license key file")
 	httpPort := flag.Int("http-port", 9100, "HTTP status page port")
 	route := flag.String("route", "/solastat-plugin-template", "AppHub route to register")
 	flag.Parse()
@@ -59,7 +58,7 @@ func main() {
 	// Connect to the core's PluginHub. Authorization can flip at runtime
 	// (e.g. right after the user pastes a license key in Settings), so react
 	// to it via OnAuthorization rather than checking it once at startup.
-	hub := pluginclient.New(*pluginHubSocket, pluginID, "0.1.0", *licenseKeyPath)
+	hub := pluginclient.New(*pluginHubSocket, pluginID, "0.1.0")
 	defer hub.Close()
 
 	authorized := false

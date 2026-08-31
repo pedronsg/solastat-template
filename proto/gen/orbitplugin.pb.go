@@ -25,7 +25,6 @@ type RegisterRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PluginId      string                 `protobuf:"bytes,1,opt,name=plugin_id,json=pluginId,proto3" json:"plugin_id,omitempty"` // e.g. "relay", "gridcharge", "auth"
 	PluginVersion string                 `protobuf:"bytes,2,opt,name=plugin_version,json=pluginVersion,proto3" json:"plugin_version,omitempty"`
-	LicenseKey    string                 `protobuf:"bytes,3,opt,name=license_key,json=licenseKey,proto3" json:"license_key,omitempty"` // base64 Ed25519 signature, empty if not yet activated
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -74,20 +73,12 @@ func (x *RegisterRequest) GetPluginVersion() string {
 	return ""
 }
 
-func (x *RegisterRequest) GetLicenseKey() string {
-	if x != nil {
-		return x.LicenseKey
-	}
-	return ""
-}
-
 type RegisterResponse struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Authorized       bool                   `protobuf:"varint,1,opt,name=authorized,proto3" json:"authorized,omitempty"`
-	Reason           string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`                                               // human-readable, shown in plugin logs when unauthorized
-	DeviceSerialHash string                 `protobuf:"bytes,3,opt,name=device_serial_hash,json=deviceSerialHash,proto3" json:"device_serial_hash,omitempty"` // hex sha256(deviceSerial+":"+pluginId), for diagnostics
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Authorized    bool                   `protobuf:"varint,1,opt,name=authorized,proto3" json:"authorized,omitempty"`
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"` // human-readable, shown in plugin logs when unauthorized
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RegisterResponse) Reset() {
@@ -134,13 +125,6 @@ func (x *RegisterResponse) GetReason() string {
 	return ""
 }
 
-func (x *RegisterResponse) GetDeviceSerialHash() string {
-	if x != nil {
-		return x.DeviceSerialHash
-	}
-	return ""
-}
-
 type SubscribeRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -181,6 +165,7 @@ type Reading struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Value         float64                `protobuf:"fixed64,1,opt,name=value,proto3" json:"value,omitempty"`
 	Unit          string                 `protobuf:"bytes,2,opt,name=unit,proto3" json:"unit,omitempty"`
+	Label         string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -225,6 +210,13 @@ func (x *Reading) GetValue() float64 {
 func (x *Reading) GetUnit() string {
 	if x != nil {
 		return x.Unit
+	}
+	return ""
+}
+
+func (x *Reading) GetLabel() string {
+	if x != nil {
+		return x.Label
 	}
 	return ""
 }
@@ -517,22 +509,20 @@ var File_proto_orbitplugin_proto protoreflect.FileDescriptor
 
 const file_proto_orbitplugin_proto_rawDesc = "" +
 	"\n" +
-	"\x17proto/orbitplugin.proto\x12\vorbitplugin\"v\n" +
+	"\x17proto/orbitplugin.proto\x12\vorbitplugin\"U\n" +
 	"\x0fRegisterRequest\x12\x1b\n" +
 	"\tplugin_id\x18\x01 \x01(\tR\bpluginId\x12%\n" +
-	"\x0eplugin_version\x18\x02 \x01(\tR\rpluginVersion\x12\x1f\n" +
-	"\vlicense_key\x18\x03 \x01(\tR\n" +
-	"licenseKey\"x\n" +
+	"\x0eplugin_version\x18\x02 \x01(\tR\rpluginVersion\"J\n" +
 	"\x10RegisterResponse\x12\x1e\n" +
 	"\n" +
 	"authorized\x18\x01 \x01(\bR\n" +
 	"authorized\x12\x16\n" +
-	"\x06reason\x18\x02 \x01(\tR\x06reason\x12,\n" +
-	"\x12device_serial_hash\x18\x03 \x01(\tR\x10deviceSerialHash\"\x12\n" +
-	"\x10SubscribeRequest\"3\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x12\n" +
+	"\x10SubscribeRequest\"I\n" +
 	"\aReading\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\x01R\x05value\x12\x12\n" +
-	"\x04unit\x18\x02 \x01(\tR\x04unit\"\xdc\x01\n" +
+	"\x04unit\x18\x02 \x01(\tR\x04unit\x12\x14\n" +
+	"\x05label\x18\x03 \x01(\tR\x05label\"\xdc\x01\n" +
 	"\rSolarSnapshot\x12\x1c\n" +
 	"\n" +
 	"ts_unix_ms\x18\x01 \x01(\x03R\btsUnixMs\x12\x14\n" +

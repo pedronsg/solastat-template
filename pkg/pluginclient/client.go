@@ -11,8 +11,6 @@ package pluginclient
 
 import (
 	"context"
-	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -26,9 +24,9 @@ const (
 	dialTimeout    = 3 * time.Second
 	rpcTimeout     = 3 * time.Second
 	reconnectDelay = 2 * time.Second
-	// reregisterInterval re-sends Register while unauthorized, so pasting a
-	// license key into the Settings page unlocks a running plugin without
-	// requiring a restart.
+	// reregisterInterval re-sends Register while unauthorized, so activating
+	// the plugin in the core's Settings page unlocks a running plugin
+	// without requiring a restart.
 	reregisterInterval = 15 * time.Second
 )
 
@@ -41,10 +39,9 @@ const DefaultSocketPath = "/tmp/orbitos/solastat-omie-pluginhub.sock"
 // by gridcharge.ModbusAccess, so it's a drop-in Modbus transport for
 // automation packages ported from the monolith.
 type Client struct {
-	target         string
-	pluginID       string
-	pluginVersion  string
-	licenseKeyPath string
+	target        string
+	pluginID      string
+	pluginVersion string
 
 	mu         sync.RWMutex
 	conn       *grpc.ClientConn
@@ -64,16 +61,15 @@ type Client struct {
 
 // New starts connecting in the background and returns immediately. Call
 // Close on shutdown to stop the background reconnect loop.
-func New(socketPath, pluginID, pluginVersion, licenseKeyPath string) *Client {
+func New(socketPath, pluginID, pluginVersion string) *Client {
 	if socketPath == "" {
 		socketPath = DefaultSocketPath
 	}
 	c := &Client{
-		target:         "unix:" + socketPath,
-		pluginID:       pluginID,
-		pluginVersion:  pluginVersion,
-		licenseKeyPath: licenseKeyPath,
-		done:           make(chan struct{}),
+		target:        "unix:" + socketPath,
+		pluginID:      pluginID,
+		pluginVersion: pluginVersion,
+		done:          make(chan struct{}),
 	}
 	go c.connectLoop()
 	return c
@@ -206,19 +202,11 @@ func (c *Client) register() bool {
 		return false
 	}
 
-	key := ""
-	if c.licenseKeyPath != "" {
-		if b, err := os.ReadFile(c.licenseKeyPath); err == nil {
-			key = strings.TrimSpace(string(b))
-		}
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 	defer cancel()
 	resp, err := hub.Register(ctx, &pb.RegisterRequest{
 		PluginId:      c.pluginID,
 		PluginVersion: c.pluginVersion,
-		LicenseKey:    key,
 	})
 
 	var authorized bool

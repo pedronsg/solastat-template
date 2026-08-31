@@ -34,10 +34,11 @@ const (
 // socket — never exposed off-device — so the transport itself carries no
 // TLS; authorization is enforced at the application layer by Register.
 type PluginHubClient interface {
-	// Register is the first call a plugin makes. The core verifies LicenseKey
-	// against SHA256(deviceSerial + ":" + PluginId) using the plugin's
-	// embedded Ed25519 public key. A plugin that gets Authorized=false must
-	// not start its automation loop.
+	// Register is the first call a plugin makes, and it repeats it
+	// periodically while unauthorized. The whole license hash/key exchange
+	// happens on the core's Settings page — the plugin only asks "am I
+	// authorized right now", it never handles a license key itself. A plugin
+	// that gets Authorized=false must not start its automation loop.
 	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error)
 	// SubscribeSolarData streams every poll-cycle snapshot from the core's
 	// Modbus poller, for as long as the plugin stays connected.
@@ -114,10 +115,11 @@ func (c *pluginHubClient) WriteRegister(ctx context.Context, in *WriteRegisterRe
 // socket — never exposed off-device — so the transport itself carries no
 // TLS; authorization is enforced at the application layer by Register.
 type PluginHubServer interface {
-	// Register is the first call a plugin makes. The core verifies LicenseKey
-	// against SHA256(deviceSerial + ":" + PluginId) using the plugin's
-	// embedded Ed25519 public key. A plugin that gets Authorized=false must
-	// not start its automation loop.
+	// Register is the first call a plugin makes, and it repeats it
+	// periodically while unauthorized. The whole license hash/key exchange
+	// happens on the core's Settings page — the plugin only asks "am I
+	// authorized right now", it never handles a license key itself. A plugin
+	// that gets Authorized=false must not start its automation loop.
 	Register(context.Context, *RegisterRequest) (*RegisterResponse, error)
 	// SubscribeSolarData streams every poll-cycle snapshot from the core's
 	// Modbus poller, for as long as the plugin stays connected.

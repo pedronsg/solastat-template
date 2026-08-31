@@ -10,8 +10,10 @@ provides:
   specific device: `licensegen` signs `SHA256(deviceSerial+":"+pluginID)`
   offline, the core verifies it with the embedded public key.
 - `pkg/pluginclient` — the client every plugin imports to connect to the
-  core's `PluginHub`: license handshake, solar-data subscription, and
-  Modbus register read/write.
+  core's `PluginHub`: authorization handshake (re-checked periodically, no
+  restart needed after activation), solar-data subscription, and Modbus
+  register read/write. The plugin never handles a license key itself — it
+  only asks the core "am I authorized right now".
 - `cmd/licensegen` — offline-only CLI to generate the signing key pair and
   sign per-device/per-plugin license keys. Never runs on a device.
 - `cmd/plugin-template` — a minimal, complete, buildable plugin app. Copy
@@ -30,10 +32,14 @@ provides:
 
 ## License key flow
 
+The entire hash → key exchange happens inside the core app's Settings page —
+plugins are unaware of it, they just ask "am I authorized" via `Register`.
+
 1. Settings page (core app) shows `SHA256(deviceSerial+":"+pluginID)` for a
    locked plugin.
 2. Whoever holds the private key runs, offline:
    `licensegen sign -priv <key.hex> -hash <hash-from-settings>`
-3. The resulting key is pasted back into Settings. The core verifies it and
-   persists it; the plugin picks up authorization within
-   `pluginclient.reregisterInterval` without needing a restart.
+3. The resulting key is pasted back into Settings. The core verifies it
+   itself (it holds the public key) and persists the result; the plugin
+   picks up authorization within `pluginclient.reregisterInterval`, no
+   restart needed.
