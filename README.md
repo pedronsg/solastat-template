@@ -1,8 +1,8 @@
 # solastat-template
 
-Public shared contract between `solastat-omie` (the core) and its plugins
+Public shared contract between `solastat` (the core) and its plugins
 (relay, gridcharge, and any future one — all compiled directly into the
-core binary, gated behind `solastat-omie`'s `plugins` Go build tag). There
+core binary, gated behind `solastat`'s `plugins` Go build tag). There
 is no separate process, no RPC, no `.orb` of their own. This repo has no
 dependency on the OrbitOS SDK or on anything else: it is the one small,
 always-public thing the core requires to build, whether or not the tag is
@@ -37,11 +37,11 @@ type Info struct { ID, Version string; Authorized bool }
 
 All plugins live together in one private repo,
 [`solastat-plugins`](https://github.com/pedronsg/solastat-plugins) (checked
-out as `solastat-omie`'s `plugins/private` submodule):
+out as `solastat`'s `plugins/private` submodule):
 
 ```
 solastat-plugins/
-├── wire.go                — the only symbols solastat-omie imports: Wire<Name>(...) helpers
+├── wire.go                — the only symbols solastat imports: Wire<Name>(...) helpers
 ├── pkg/relay/              — a plugin: exported Controller + Plugin satisfying pluginapi.Hooks
 ├── pkg/gridcharge/         — another one, same shape
 ├── plugins/auth/           — solastat-auth submodule, for verifying license keys
@@ -58,14 +58,14 @@ Adding a new plugin:
    `RegisterRoutes(mux, route, apiPrefix string)`.
 2. Add a `Wire<Name>(...)` helper to `wire.go` that constructs it and
    computes the device hash — the one place this repo needs
-   `solastat-auth` directly, so `solastat-omie` never has to.
-3. In `solastat-omie`, add `wire<Name>(...)` to `cmd/solastat-omie/plugins.go`
+   `solastat-auth` directly, so `solastat` never has to.
+3. In `solastat`, add `wire<Name>(...)` to `cmd/solastat/plugins.go`
    (`//go:build plugins`) calling `plugins.Wire<Name>(...)`, and a matching
    no-op in `plugins_stub.go` (`//go:build !plugins`) so the untagged build
    always compiles. Wire it into `main.go` the same way relay/gridcharge
    are: call `OnReading`/`Tick` from the existing hooks, `RegisterRoutes`
    on the shared mux, `registerPlugin(...)` so it shows up in Settings.
-4. `solastat-omie/go.mod` needs `require`+`replace` entries for
+4. `solastat/go.mod` needs `require`+`replace` entries for
    `solastat-plugins` (and `solastat-auth`, since a replace directive
    inside a dependency is ignored when that dependency is used by another
    module) — always safe to have present even when the submodules aren't
@@ -74,7 +74,7 @@ Adding a new plugin:
    this repo. Confirmed by building a fresh clone with only
    `plugins/template` initialized.
 5. Building with `-tags plugins` (and `plugins/private` checked out)
-   compiles every plugin directly into the `solastat-omie` binary — one
+   compiles every plugin directly into the `solastat` binary — one
    process, one `.orb`. Building without the tag (the default) produces
    the plain core, with no reference to any of them.
 
@@ -83,7 +83,7 @@ Adding a new plugin:
 Unchanged in spirit from the previous gRPC-based design, just simpler now
 that there's no process boundary: the core's Settings page shows one device
 hash (`SHA256(deviceSerial)`, reimplemented locally in the core — see
-`internal/pluginhub` in `solastat-omie` — so it never needs to import
+`internal/pluginhub` in `solastat` — so it never needs to import
 `solastat-auth` itself) and one generic "paste a key" box. The core just
 stores whatever key is pasted; each compiled-in plugin's wiring code
 verifies it directly (`solastat-auth.Authorizes(key, hash, pluginID)`)

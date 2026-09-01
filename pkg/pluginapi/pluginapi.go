@@ -1,7 +1,7 @@
-// Package pluginapi is the shared contract between solastat-omie (the
+// Package pluginapi is the shared contract between solastat (the
 // public core) and its plugins (relay, gridcharge, ...). Plugins are
 // compiled directly into the core's binary, gated behind a Go build tag
-// (see solastat-omie's cmd/solastat-omie/plugins.go) — their actual
+// (see solastat's cmd/solastat/plugins.go) — their actual
 // implementation lives in a private repo the core only depends on with
 // that tag active. These three types are the one thing both sides need to
 // agree on regardless: the core's untagged (public, dependency-free)
