@@ -1,29 +1,30 @@
 // Package pluginapi is the shared contract between solastat-omie (the
-// core) and every plugin (relay, gridcharge, ...). A plugin is a plain Go
-// binary the core discovers in a directory and launches as a subprocess —
-// never compiled into the core, never installed as its own OrbitOS app.
-// They talk over the plugin's stdin/stdout using the newline-delimited
-// JSON protocol in protocol.go; Serve (in serve.go) implements the
-// plugin's entire side of it, so a plugin author only has to provide a
-// Hooks implementation and, optionally, an http.Handler.
+// public core) and its plugins (relay, gridcharge, ...). Plugins are
+// compiled directly into the core's binary, gated behind a Go build tag
+// (see solastat-omie's cmd/solastat-omie/plugins.go) — their actual
+// implementation lives in a private repo the core only depends on with
+// that tag active. These three types are the one thing both sides need to
+// agree on regardless: the core's untagged (public, dependency-free)
+// build still declares an interface naming them, so this package has to
+// stay importable without pulling in anything private.
 //
 // This package has no dependency beyond the Go standard library, so it
 // never drags anything into a build that imports it.
 package pluginapi
 
 // Reading mirrors one decoded register value from a poll cycle. The core
-// builds a map[string]Reading from its own internal/solar.Data and sends
-// it to every running plugin's OnReading.
+// builds a map[string]Reading from its own internal/solar.Data and calls
+// every compiled-in plugin's OnReading with it directly.
 type Reading struct {
 	Label string  `json:"label,omitempty"`
 	Value float64 `json:"value"`
 	Unit  string  `json:"unit,omitempty"`
 }
 
-// Hooks is what a plugin's Serve call is given. Both methods must be safe
-// to call even while the plugin is unauthorized — a plugin gates its own
-// behavior internally (see solastat-auth) rather than relying on the core
-// to withhold calls.
+// Hooks is what the core calls directly on a compiled-in plugin. Both
+// methods must be safe to call even while the plugin is unauthorized — a
+// plugin gates its own behavior internally (see solastat-auth) rather than
+// relying on the core to withhold calls.
 type Hooks interface {
 	// OnReading is called once per completed solar poll cycle.
 	OnReading(readings map[string]Reading)
