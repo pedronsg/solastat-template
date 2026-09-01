@@ -45,3 +45,17 @@ type Info struct {
 	Version    string `json:"version,omitempty"`
 	Authorized bool   `json:"authorized"`
 }
+
+// LogEvent is one entry a plugin reports for the core's dashboard activity
+// log — e.g. relay's Kind "relay" (On true/false) or its own read of the
+// inverter's status register (Kind "error"/"ok", Code the raw value), or
+// gridcharge's free-text write-attempt log (Text, OK). The core timestamps
+// and tags it with the reporting plugin's ID before storing it — a plugin
+// only ever describes what happened, never where or when it's kept.
+type LogEvent struct {
+	Kind string `json:"kind,omitempty"`
+	On   bool   `json:"on,omitempty"`
+	Code int    `json:"code,omitempty"`
+	Text string `json:"text,omitempty"`
+	OK   bool   `json:"ok,omitempty"`
+}
