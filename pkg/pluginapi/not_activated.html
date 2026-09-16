@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SolaStat · Plugin not activated</title>
+  <style>
+    :root {
+      --bg:     #0f172a;
+      --card:   #1e293b;
+      --border: #334155;
+      --text:   #f1f5f9;
+      --muted:  #94a3b8;
+      --danger: #f87171;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--danger);
+      border-radius: 0.875rem;
+      padding: 1.5rem;
+      max-width: 26rem;
+      text-align: center;
+    }
+    h1 { font-size: 1.05rem; color: var(--danger); margin-bottom: 0.6rem; }
+    p { font-size: 0.85rem; color: var(--muted); line-height: 1.6; margin-bottom: 1rem; }
+    a.back {
+      display: inline-block;
+      font-size: 0.8rem;
+      color: var(--text);
+      text-decoration: none;
+      border: 1px solid var(--border);
+      border-radius: 0.45rem;
+      padding: 0.4rem 0.9rem;
+      transition: border-color 0.15s;
+    }
+    a.back:hover { border-color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Plugin not activated</h1>
+    <p>This plugin has no valid license key yet. Paste one in Settings → Plugins to unlock it.</p>
+    <a class="back" id="settings-link" href="/settings">← Settings</a>
+  </div>
+  <script>
+    const routePrefix = window.location.pathname.startsWith('/solastat') ? '/solastat' : '';
+    document.getElementById('settings-link').href = routePrefix + '/settings';
+  </script>
+</body>
+</html>

@@ -19,6 +19,24 @@ type Hooks interface {
 }
 
 type Info struct { ID, Version string; Authorized bool }
+
+type LogEvent struct {
+    Kind, Text, NotifyType string
+    On, OK                 bool
+    Code                   int
+}
+
+type NotificationType struct {
+    ID, Label      string
+    DefaultEnabled bool
+}
+
+type NotificationTypeProvider interface {
+    NotificationTypes() []NotificationType
+}
+
+func RequireAuthorized(authorized func() bool, next http.HandlerFunc) http.HandlerFunc
+func ServeDashboard(authorized func() bool, activatedHTML []byte) http.HandlerFunc
 ```
 
 - **`Reading`** — the shared shape for a decoded poll-cycle value. The core
@@ -32,6 +50,45 @@ type Info struct { ID, Version string; Authorized bool }
   than trusting the core to withhold calls.
 - **`Info`** — what a plugin reports about itself for the Settings page's
   plugin list.
+- **`LogEvent`** — one entry a plugin reports for the core's dashboard
+  activity log (via the `logEvent func(pluginapi.LogEvent)` closure the
+  core hands each plugin at wiring time — see `wire.go`'s `LogEvent`
+  field). `Text`/`OK` are the two fields every plugin-sourced entry should
+  set: the Logs card renders any non-core source generically off those
+  alone (dot green if `OK`, amber otherwise), it never special-cases which
+  plugin sent it. `Kind`/`On`/`Code` are free for a plugin's own use (e.g.
+  its own history endpoint) and aren't interpreted by the core.
+  `NotifyType`+`Text` double as the mobile-notification path: when
+  `NotifyType` is non-empty, the core looks up `"<plugin ID>:<NotifyType>"`
+  in the user's notification settings and, if enabled, pushes `Text` via
+  `MobileNotificationManager`. Leave `NotifyType` empty for log-only events.
+- **`NotificationType`** / **`NotificationTypeProvider`** — how a plugin
+  declares which of its events are notification-worthy, without the core
+  ever hardcoding a plugin's identity. Implement `NotificationTypes()
+  []NotificationType` on your `Plugin` (checked via an optional type
+  assertion, like `Close() error` already is) and the Settings →
+  Notifications page gets a checkbox for it automatically, namespaced
+  `"<plugin ID>:<type ID>"` so two plugins can never collide. `NotifyType`
+  on a `LogEvent` must match one of the IDs returned here.
+- **`RequireAuthorized`** / **`ServeDashboard`** — the shared HTTP guard
+  every plugin's `RegisterRoutes` should use for *every* route, GET
+  included: an unlicensed plugin should do nothing and reveal nothing
+  (current readings, saved config, activation history — not just refuse
+  writes), not just look functional until you click Save. `ServeDashboard`
+  serves your plugin's real HTML while `authorized()` is true, or a shared,
+  generic "not activated" page otherwise, so every plugin's unlicensed
+  state looks identical without each one carrying its own copy of that
+  page. See relay/gridcharge's `http.go` for the pattern — it's near
+  boilerplate-free:
+
+  ```go
+  func (p *Plugin) RegisterRoutes(mux *http.ServeMux, route, apiPrefix string) {
+      mux.HandleFunc(route, pluginapi.ServeDashboard(p.authorized.Load, dashboardHTML))
+      mux.HandleFunc(apiPrefix, pluginapi.RequireAuthorized(p.authorized.Load, func(w http.ResponseWriter, r *http.Request) {
+          // ... your actual handler ...
+      }))
+  }
+  ```
 
 ## The pattern for a new plugin
 
@@ -55,7 +112,11 @@ Adding a new plugin:
    `pkg/relay`/`pkg/gridcharge`: a `Controller` for the logic, a `Plugin`
    wrapping it that gates `Hooks`/HTTP writes on
    `solastat-auth.Authorizes(key, deviceHash, PluginID)`, and
-   `RegisterRoutes(mux, route, apiPrefix string)`.
+   `RegisterRoutes(mux, route, apiPrefix string)` built on
+   `pluginapi.RequireAuthorized`/`ServeDashboard` (see above) so every
+   route — GET included — is gated the same way with no extra code.
+   Optionally implement `NotificationTypes() []pluginapi.NotificationType`
+   if any of your `LogEvent`s should be able to push a mobile notification.
 2. Add a `Wire<Name>(...)` helper to `wire.go` that constructs it and
    computes the device hash — the one place this repo needs
    `solastat-auth` directly, so `solastat` never has to.
