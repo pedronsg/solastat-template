@@ -37,6 +37,20 @@ type NotificationTypeProvider interface {
 
 func RequireAuthorized(authorized func() bool, next http.HandlerFunc) http.HandlerFunc
 func ServeDashboard(authorized func() bool, activatedHTML []byte) http.HandlerFunc
+
+type BatteryAction string // ForceCharge, ForceExport
+type BatteryTarget struct { SocPercent, PowerWatts int }
+
+type InverterControl interface {
+    Model() string
+    Available() bool
+    Supports(a BatteryAction) bool
+    Configure(a BatteryAction, t BatteryTarget) error
+    Enable(a BatteryAction, now time.Time) error
+    Disable(a BatteryAction) error
+    NeedsRefresh(a BatteryAction, now time.Time) bool
+    Active(a BatteryAction) (bool, error)
+}
 ```
 
 - **`Reading`** — the shared shape for a decoded poll-cycle value. The core
@@ -89,6 +103,16 @@ func ServeDashboard(authorized func() bool, activatedHTML []byte) http.HandlerFu
       }))
   }
   ```
+- **`InverterControl`** — the brand-neutral way a plugin forces the active
+  inverter's battery to charge from the grid (`ForceCharge`) or export to
+  it (`ForceExport`). A plugin sets the target with `Configure`, switches
+  the action with `Enable`/`Disable`, and reads the real state back with
+  `Active`. It never sees a Modbus register: the drivers (one per inverter
+  family, picked from the profile chosen in Settings) live in the private
+  plugins repo, so a plugin written against this interface works unchanged
+  on every inverter a driver exists for. `Supports` says which actions the
+  active inverter has a driver for; `Model` changes when the user switches
+  inverter.
 
 ## The pattern for a new plugin
 
