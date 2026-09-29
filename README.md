@@ -125,10 +125,14 @@ solastat-plugins/
 ├── wire.go                — the only symbols solastat imports: Wire<Name>(...) helpers
 ├── pkg/relay/              — a plugin: exported Controller + Plugin satisfying pluginapi.Hooks
 ├── pkg/gridcharge/         — another one, same shape
-├── plugins/auth/           — solastat-auth submodule, for verifying license keys
-├── orbit-os-sdk-go/        — vendored SDK copy, for plugins needing device services (GPIO, etc.)
-└── go.mod
+└── go.mod                  — replaces pointing at solastat's own checkouts
 ```
+
+It has no checkouts of its own: its `go.mod` resolves this repo,
+`solastat-auth` (for verifying license keys) and the OrbitOS SDK (for
+plugins needing device services — GPIO, etc.) from `solastat`'s
+`plugins/template`, `plugins/auth` and `orbit-os-sdk-go`, so it only
+builds as that submodule.
 
 Adding a new plugin:
 
