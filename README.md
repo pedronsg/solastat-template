@@ -18,7 +18,12 @@ type Hooks interface {
     Tick()
 }
 
-type Info struct { ID, Version string; Authorized bool }
+type Info struct {
+    ID, Version          string
+    Authorized           bool
+    Name, Description    map[string]string // by language code, "en" the fallback
+    Icon, Category       string
+}
 
 type LogEvent struct {
     Kind, Text, NotifyType string
@@ -63,7 +68,12 @@ type InverterControl interface {
   (see [`solastat-auth`](https://github.com/pedronsg/solastat-auth)) rather
   than trusting the core to withhold calls.
 - **`Info`** — what a plugin reports about itself for the Settings page's
-  plugin list.
+  plugin list and the app's Plugins menu: its display name and a one-line
+  description in each language, an emoji icon, and a category
+  (`CategoryEnergy`, `CategoryAutomation`, `CategoryAnalysis` or
+  `CategoryTools`) the menu groups plugins by once there are several. The
+  ID stays internal (routes, data files, license keys); the name is what
+  users see, and can change without touching any of those.
 - **`LogEvent`** — one entry a plugin reports for the core's dashboard
   activity log (via the `logEvent func(pluginapi.LogEvent)` closure the
   core hands each plugin at wiring time — see `wire.go`'s `LogEvent`

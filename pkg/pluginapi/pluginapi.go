@@ -38,13 +38,34 @@ type Hooks interface {
 	Tick()
 }
 
-// Info describes a running plugin, for the Settings page's plugin list —
-// reported by the plugin itself, never guessed by the core.
+// Info describes a running plugin, for the Settings page's plugin list and
+// the app's Plugins menu — reported by the plugin itself, never guessed by
+// the core.
 type Info struct {
 	ID         string `json:"id"`
 	Version    string `json:"version,omitempty"`
 	Authorized bool   `json:"authorized"`
+
+	// Name and Description are what the Plugins menu shows, keyed by
+	// language code ("en", "pt", "es", "de", "it", "fr"); "en" is the
+	// fallback for a language missing here, and the ID for a missing Name.
+	// Description is one short line on what the plugin does.
+	Name        map[string]string `json:"name,omitempty"`
+	Description map[string]string `json:"description,omitempty"`
+	// Icon is one emoji shown next to the name.
+	Icon string `json:"icon,omitempty"`
+	// Category groups plugins in the menu once there are several: one of
+	// CategoryEnergy, CategoryAutomation, CategoryAnalysis, CategoryTools.
+	Category string `json:"category,omitempty"`
 }
+
+// The categories the Plugins menu knows how to name.
+const (
+	CategoryEnergy     = "energy"
+	CategoryAutomation = "automation"
+	CategoryAnalysis   = "analysis"
+	CategoryTools      = "tools"
+)
 
 // LogEvent is one entry a plugin reports for the core's dashboard activity
 // log — e.g. relay's Kind "relay" (On true/false) or its own read of the
