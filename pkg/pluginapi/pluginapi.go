@@ -101,6 +101,10 @@ type NotificationType struct {
 	ID             string `json:"id"`
 	Label          string `json:"label"`
 	DefaultEnabled bool   `json:"default_enabled"`
+	// Labels is Label translated, keyed by language code like Info.Name
+	// ("en", "pt", "es", "de", "it", "fr"); Label is the fallback for a
+	// language missing here.
+	Labels map[string]string `json:"labels,omitempty"`
 }
 
 // NotificationTypeProvider is an optional interface a compiled-in plugin
