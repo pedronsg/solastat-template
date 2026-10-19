@@ -57,6 +57,10 @@ type Info struct {
 	// Category groups plugins in the menu once there are several: one of
 	// CategoryEnergy, CategoryAutomation, CategoryAnalysis, CategoryTools.
 	Category string `json:"category,omitempty"`
+	// Path is the address of the plugin's page the menu links to, e.g.
+	// "/priceshift"; "/<ID>" when empty. It lets the page carry the name
+	// the user knows while the ID (license keys, data files) stays.
+	Path string `json:"path,omitempty"`
 }
 
 // The categories the Plugins menu knows how to name.
