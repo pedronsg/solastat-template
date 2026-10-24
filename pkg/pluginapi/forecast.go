@@ -12,6 +12,9 @@ type ForecastPoint struct {
 type ForecastDay struct {
 	Day time.Time `json:"day"` // its local midnight
 	KWh float64   `json:"kwh"`
+	// ClearKWh is the same day's energy under a clear sky, 0 when not
+	// known: the forecast's share of it says how sunny the day looks.
+	ClearKWh float64 `json:"clear_kwh,omitempty"`
 }
 
 // Forecast is what a ForecastProvider holds: the expected power through
