@@ -16,6 +16,16 @@ type RelayState struct {
 	Waiting *RelayReason `json:"waiting,omitempty"`
 	// OnToday is how long it has been on since midnight.
 	OnToday time.Duration `json:"on_today"`
+	// Plan is when the mode plans it on, today and tomorrow as far as it
+	// knows (the price mode's hours, from the day-ahead prices); empty for
+	// a mode without a plan.
+	Plan []RelayPlanBlock `json:"plan,omitempty"`
+}
+
+// RelayPlanBlock is a stretch a relay is planned on, [From, To).
+type RelayPlanBlock struct {
+	From time.Time `json:"from"`
+	To   time.Time `json:"to"`
 }
 
 // RelayReason is a reason as a translation key, the values its text takes,
