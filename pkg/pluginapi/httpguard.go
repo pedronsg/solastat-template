@@ -1,9 +1,12 @@
 package pluginapi
 
 import (
+	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"strings"
 )
 
 //go:embed not_activated.html
@@ -39,13 +42,41 @@ func RequireAuthorized(authorized func() bool, next http.HandlerFunc) http.Handl
 // each one maintaining its own copy of that page, and a brand-new plugin
 // gets it for free just by calling this instead of writing its own
 // http.HandleFunc for its dashboard route.
+//
+// Each page has an ETag, with no-cache: the browser asks every time (the
+// page must match the core's /i18n.js and /nav.js after an update) and a
+// copy it already has costs a 304, not the whole page.
 func ServeDashboard(authorized func() bool, activatedHTML []byte) http.HandlerFunc {
+	activatedTag, notActivatedTag := etagOf(activatedHTML), etagOf(notActivatedHTML)
 	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		body, etag := activatedHTML, activatedTag
 		if !authorized() {
-			w.Write(notActivatedHTML)
+			body, etag = notActivatedHTML, notActivatedTag
+		}
+		h := w.Header()
+		h.Set("Content-Type", "text/html; charset=utf-8")
+		h.Set("Cache-Control", "no-cache")
+		h.Set("ETag", etag)
+		if noneMatch(r.Header.Get("If-None-Match"), etag) {
+			w.WriteHeader(http.StatusNotModified)
 			return
 		}
-		w.Write(activatedHTML)
+		w.Write(body)
 	}
+}
+
+// etagOf is body's ETag, quoted.
+func etagOf(body []byte) string {
+	sum := sha256.Sum256(body)
+	return `"` + hex.EncodeToString(sum[:8]) + `"`
+}
+
+// noneMatch reports whether an If-None-Match header names etag.
+func noneMatch(inm, etag string) bool {
+	for _, t := range strings.Split(inm, ",") {
+		if t = strings.TrimPrefix(strings.TrimSpace(t), "W/"); t == etag || t == "*" {
+			return true
+		}
+	}
+	return false
 }
